@@ -1,0 +1,89 @@
+# Category configuration. Adding a category = add an entry here; no code changes.
+#
+# Fields:
+#   name              UPPER_SNAKE_CASE, unique
+#   description       shown to the classifier LLM (keep factual, one or two sentences)
+#   extraction_schema one of: requirement | quotation | invoice | none
+#   draft_reply       false => no AI draft is generated; admin decides (reject / request draft)
+#   default_priority  LOW | MEDIUM | HIGH | URGENT (used if the LLM gives none)
+#   requires_action   default when the LLM gives none
+
+fallback_category: GENERAL   # used when the LLM returns an unknown category (and flagged for review)
+
+categories:
+  - name: REQUIREMENT
+    description: >-
+      An internal department requests equipment, software, services or IT support
+      that must be procured or arranged.
+    extraction_schema: requirement
+    draft_reply: true
+    default_priority: MEDIUM
+    requires_action: true
+
+  - name: VENDOR_QUOTATION
+    description: >-
+      A vendor or supplier sends a price quotation, proposal or estimate, often with a
+      PDF attachment.
+    extraction_schema: quotation
+    draft_reply: true
+    default_priority: MEDIUM
+    requires_action: true
+
+  - name: INVOICE
+    description: >-
+      A vendor sends a bill or invoice requesting payment for goods or services already
+      supplied.
+    extraction_schema: invoice
+    draft_reply: true
+    default_priority: HIGH
+    requires_action: true
+
+  - name: TECHNICAL_QUERY
+    description: >-
+      A question about an IT system, account, network, device or software problem.
+    extraction_schema: none
+    draft_reply: true
+    default_priority: MEDIUM
+    requires_action: true
+
+  - name: GENERAL
+    description: >-
+      A legitimate institutional email that fits no other category (announcements,
+      meeting requests, general questions).
+    extraction_schema: none
+    draft_reply: true
+    default_priority: LOW
+    requires_action: false
+
+  - name: IRRELEVANT
+    description: >-
+      Spam, phishing, marketing newsletters, automated notifications, or anything
+      unrelated to the institution's IT/admin work.
+    extraction_schema: none
+    # Never auto-draft replies to spam: a reply confirms the address is live and wastes
+    # reviewer time. The email still goes to review so a human confirms the label.
+    draft_reply: false
+    default_priority: LOW
+    requires_action: false
+
+# Deterministic spam/phishing signals. These are HINTS attached to the email and shown to
+# the admin. They can only push an email TOWARD review, never auto-delete or auto-send.
+spam_signals:
+  # Gmail labels that mark an email as suspicious.
+  gmail_labels: [SPAM]
+  # Headers typical of bulk mail.
+  bulk_headers: [List-Unsubscribe, List-Id]
+  precedence_values: [bulk, junk, list]
+  # Sender domains of the institution and known vendors. Mail from elsewhere is not spam
+  # by itself, but gets an "external sender" note.
+  trusted_sender_domains: []
+  # Phrases that often appear in phishing or injection attempts (case-insensitive).
+  suspicious_phrases:
+    - ignore previous instructions
+    - ignore all previous instructions
+    - you are now
+    - system prompt
+    - verify your password
+    - confirm your account
+    - wire transfer urgently
+    - gift card

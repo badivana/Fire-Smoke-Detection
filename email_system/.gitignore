@@ -1,0 +1,27 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+credentials.json
+token.json
+secrets/
+
+# Runtime data
+data/*
+!data/.gitkeep
+*.db
+*.sqlite3
+logs/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# Frontend
+node_modules/
+dist/
