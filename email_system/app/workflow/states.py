@@ -28,8 +28,8 @@ ALLOWED: dict[S, frozenset[S]] = {
     ),
     S.EDIT_REQUIRED: frozenset({S.UNDER_REVIEW, S.DRAFT_GENERATED, S.REJECTED, S.ERROR}),
     # Editing an approved draft sends it back for review; approval covers exact text only.
-    S.APPROVED: frozenset({S.SENT, S.FAILED, S.UNDER_REVIEW}),
-    S.FAILED: frozenset({S.SENT, S.UNDER_REVIEW}),
+    S.APPROVED: frozenset({S.SENT, S.FAILED, S.UNDER_REVIEW, S.REJECTED}),
+    S.FAILED: frozenset({S.SENT, S.UNDER_REVIEW, S.REJECTED}),
     S.REJECTED: frozenset({S.UNDER_REVIEW}),
     # Retry: reset to NEW and run the pipeline again.
     S.ERROR: frozenset({S.NEW}),

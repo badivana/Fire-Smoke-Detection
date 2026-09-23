@@ -86,8 +86,13 @@ class Settings(BaseSettings):
     ocr_enabled: bool = True
     tesseract_cmd: str | None = None
 
+    # --- Replies ---
+    institution_name: str = Field(default="the Institute", max_length=200)
+    reply_signature: str = Field(default="IT/Admin Office", max_length=500)
+
     # --- Sending ---
     send_mode: SendMode = SendMode.SIMULATED
+    outbox_dir: Path = BASE_DIR / "data" / "outbox"  # SEND_MODE=simulated writes .eml here
     # Max automatic retries of processing (not sending) for one email.
     max_processing_attempts: int = Field(default=3, ge=1, le=10)
 

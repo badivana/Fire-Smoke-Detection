@@ -108,3 +108,57 @@ Items marked **[accepted]** changed or added to the spec. The user approved them
 - **Attachments not read yet** (text layer and OCR come in Phase 10) are marked in the
   prompt as "content not available", listed in `missing_information`, and flagged for
   review.
+
+## H. Phase 6 (drafting) decisions
+
+- **Guidance for each category**, in the prompt:
+  - quotations: acknowledge, never accept or order;
+  - invoices: acknowledge, never confirm payment or a change of bank details;
+  - technical queries: acknowledge, never claim a fix.
+
+  The drafting prompt forbids stating that anything is approved, paid, ordered or scheduled.
+- **The extracted data counts as untrusted too.** It comes from the email, so it sits in
+  its own delimited block, not in the trusted part of the prompt.
+- **Admin regenerate instructions are trusted.** They come from the authenticated admin.
+  They're capped at 1000 characters and sit outside the untrusted blocks.
+- **Draft warnings** are computed in code and flag, without editing, anything in the draft
+  that the email doesn't support: numbers, links, addresses, commitment phrases. Missing
+  information from extraction is always carried into the draft's list.
+- **State flow:** `CLASSIFIED -> DRAFT_GENERATED -> UNDER_REVIEW` in one transaction, with
+  `DRAFT_GENERATED` and `MOVED_TO_REVIEW` audit events. With no draft (spam):
+  `CLASSIFIED -> UNDER_REVIEW` plus a `NO_DRAFT_NEEDED` event.
+- **One current draft.** Regenerating clears the old draft's `is_current` flag before the
+  new one is inserted, because the database allows only one current draft per email.
+
+- **Seen in a real run (Phase 6 eval):** the two held-out attack emails were misclassified
+  (Phase 4) and at first got friendly drafts, one repeating the attacker's "pre-approved"
+  claim. Fix: **any red flag (from the LLM or the rule-based checks) blocks automatic
+  drafting**. The email goes to review, and an admin can still request a draft. After the
+  fix: 59/60 draft checks and no drafts for any suspicious email. In the measured runs no
+  legitimate email had red flags, so the rule cost nothing there.
+
+## I. Phase 7 (approval + sending) decisions
+
+- **The approval covers exact bytes.** `approvals.content_sha256` is stored at approval
+  time (a DB CHECK makes it required) and re-checked at send time. A test changes the
+  draft directly in SQL after approval, and sending is refused.
+- **Double-send protection:** `emails.send_started_at` is committed *before* the provider
+  is called.
+  - Success or a confirmed rejection (`SendRejected`) clears it.
+  - Any other exception (timeout, crash) leaves it set: `FAILED` with
+    `SEND_DELIVERY_UNKNOWN`, not retryable, and edits are blocked too.
+  - A crash after the provider call but before the DB update is covered the same way.
+- **Stale-view protection:** approve and edit take the draft id the admin saw. If someone
+  else changed the draft in the meantime, the action is refused (`STALE_DRAFT`).
+- **Warnings need an explicit acknowledgement** before approval
+  (`WARNINGS_NOT_ACKNOWLEDGED`).
+- **Added transitions:** `APPROVED -> REJECTED` and `FAILED -> REJECTED` (an admin changes
+  their mind before sending). Tests still check that `SENT` is reachable only through
+  `APPROVED`.
+- **Regenerate is an explicit admin request.** It may draft for spam or red-flagged
+  emails. If the email was approved, the approval is withdrawn first.
+- **Retry:** `ERROR -> NEW`, refused for non-retryable errors (e.g. oversized
+  attachment). The attempt limit from Phase 4 still applies.
+- **Not done yet:** there is no "confirm not delivered" action to clear an unknown send
+  outcome, so for now it needs a DB fix. This belongs with Gmail (Phase 11), where the
+  Sent folder can be checked automatically.

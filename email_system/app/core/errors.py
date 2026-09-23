@@ -26,12 +26,17 @@ class ErrorCode(StrEnum):
     SEND_DISABLED = "SEND_DISABLED"
     SEND_NOT_APPROVED = "SEND_NOT_APPROVED"
     SEND_FAILED = "SEND_FAILED"
+    INVALID_RECIPIENT = "INVALID_RECIPIENT"
     # Ambiguous: request timed out after reaching Gmail, the mail MAY have gone out.
     SEND_DELIVERY_UNKNOWN = "SEND_DELIVERY_UNKNOWN"
     # Workflow
     INVALID_TRANSITION = "INVALID_TRANSITION"
     DUPLICATE_EMAIL = "DUPLICATE_EMAIL"
     MAX_ATTEMPTS_EXCEEDED = "MAX_ATTEMPTS_EXCEEDED"
+    NOT_RETRYABLE = "NOT_RETRYABLE"
+    STALE_DRAFT = "STALE_DRAFT"
+    WARNINGS_NOT_ACKNOWLEDGED = "WARNINGS_NOT_ACKNOWLEDGED"
+    INVALID_ADMIN = "INVALID_ADMIN"
 
 
 class FailureState(StrEnum):
@@ -91,6 +96,21 @@ ERROR_POLICIES: dict[ErrorCode, ErrorPolicy] = {
     ),
     ErrorCode.MAX_ATTEMPTS_EXCEEDED: ErrorPolicy(
         FailureState.NONE, False, "Processing retry limit reached; handle manually."
+    ),
+    ErrorCode.INVALID_RECIPIENT: ErrorPolicy(
+        FailureState.NONE, False, "Reply address is not a valid email address."
+    ),
+    ErrorCode.NOT_RETRYABLE: ErrorPolicy(
+        FailureState.NONE, False, "The last error cannot be retried automatically."
+    ),
+    ErrorCode.STALE_DRAFT: ErrorPolicy(
+        FailureState.NONE, False, "The draft changed since you opened it; review it again."
+    ),
+    ErrorCode.WARNINGS_NOT_ACKNOWLEDGED: ErrorPolicy(
+        FailureState.NONE, False, "This draft has warnings; confirm you checked them."
+    ),
+    ErrorCode.INVALID_ADMIN: ErrorPolicy(
+        FailureState.NONE, False, "A named administrator is required for this action."
     ),
 }
 

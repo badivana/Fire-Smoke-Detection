@@ -71,6 +71,9 @@ class Email(TimestampMixin, Base):
     processing_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     last_error_code: Mapped[str | None] = mapped_column(String(64))
 
+    # Set (and committed) BEFORE the sender is called; cleared only on a confirmed
+    # rejection. If set while not SENT, the outcome is unknown => resending is blocked.
+    send_started_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
     sent_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
     sent_provider_message_id: Mapped[str | None] = mapped_column(String(255))
 
@@ -220,6 +223,11 @@ class Draft(TimestampMixin, Base):
     requires_human_review: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_current: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     model_name: Mapped[str | None] = mapped_column(String(100))  # None for admin edits
+    prompt_version: Mapped[str | None] = mapped_column(String(32))
+    # Automatic checks on the draft text (numbers/links not in the email, commitments...).
+    warnings: Mapped[list[str]] = mapped_column(
+        JSON, default=list, server_default=text("'[]'"), nullable=False
+    )
     created_by: Mapped[str] = mapped_column(String(100), nullable=False)
 
     email: Mapped[Email] = relationship(back_populates="drafts")
@@ -245,6 +253,8 @@ class Approval(TimestampMixin, Base):
     )
     approver: Mapped[str] = mapped_column(String(100), nullable=False)
     comment: Mapped[str | None] = mapped_column(Text)
+    # SHA-256 of the exact subject+body approved. Sending re-checks it.
+    content_sha256: Mapped[str | None] = mapped_column(String(64))
 
     email: Mapped[Email] = relationship(back_populates="approvals")
 
@@ -252,6 +262,9 @@ class Approval(TimestampMixin, Base):
         # An approval must point at the exact draft text that was approved.
         CheckConstraint(
             "decision != 'APPROVED' OR draft_id IS NOT NULL", name="approved_has_draft"
+        ),
+        CheckConstraint(
+            "decision != 'APPROVED' OR content_sha256 IS NOT NULL", name="approved_has_hash"
         ),
         CheckConstraint("length(trim(approver)) > 0", name="approver_not_blank"),
     )

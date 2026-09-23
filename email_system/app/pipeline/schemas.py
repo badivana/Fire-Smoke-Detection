@@ -8,7 +8,7 @@ because local runtimes support refs unevenly. A test keeps the two in sync.
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -165,9 +165,23 @@ def inline_json_schema(model: type[BaseModel]) -> dict[str, Any]:
                 return merged
             return {"anyOf": options}
         out = {k: walk(v) for k, v in node.items() if k not in ("title", "default", "$defs")}
+        if "const" in out:  # const support varies across runtimes; enum is universal
+            out["enum"] = [out.pop("const")]
         if out.get("type") == "object" and "properties" in out:
             out["required"] = list(out["properties"])
             out["additionalProperties"] = False
         return out
 
     return walk(raw)
+
+
+# ---------------------------------------------------------------------------- drafting
+
+
+class DraftOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    subject: str = Field(min_length=1, max_length=300)
+    body: str = Field(min_length=1, max_length=5000)
+    missing_information: list[str] = Field(max_length=20)
+    reason_for_reply: str = Field(min_length=1, max_length=600)
+    requires_human_review: Literal[True]  # the model cannot opt out of review

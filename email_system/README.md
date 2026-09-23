@@ -3,7 +3,7 @@
 This system reads, classifies and extracts details from institutional emails, then drafts replies.
 **It never sends an email without explicit admin approval.**
 
-Status: **Phase 5 of 13 (extraction)**. See `docs/DESIGN_REVIEW.md` for the review of error and spam handling.
+Status: **Phase 7 of 13 (approval workflow + sending guard)**. See `docs/DESIGN_REVIEW.md` for the review of error and spam handling.
 
 ## Install (clean Mac, Apple Silicon, zsh)
 
@@ -63,8 +63,15 @@ email_system/
 │   │   ├── classify.py      NEW -> CLASSIFIED / ERROR, review flags
 │   │   ├── extract.py       requirement / quotation / invoice extraction
 │   │   ├── grounding.py     removes any extracted value not found in the email
+│   │   ├── draft.py         reply drafts (new version per regenerate) -> UNDER_REVIEW
+│   │   ├── draft_checks.py  warnings: numbers/links/addresses not in email, commitments
+│   │   └── process.py       classify -> extract -> draft -> UNDER_REVIEW (or ERROR)
 │   │   └── failures.py      ProcessingError row + audit + ERROR state
-│   ├── workflow/states.py   the ONE transition table + transition()
+│   ├── workflow/
+│   │   ├── states.py        the ONE transition table + transition()
+│   │   └── actions.py       edit / approve / reject / request edit / regenerate /
+│   │                        reopen / retry / send_email (the only send path)
+│   ├── sending/             EmailSender interface, SimulatedSender (.eml outbox)
 │   ├── ingestion/
 │   │   ├── models.py        IncomingEmail (demo and Gmail both map to this)
 │   │   ├── normalize.py     HTML->text, hidden-text split, invisible chars, truncation
@@ -146,6 +153,7 @@ python -m app.eval -v                  # accuracy on the 10 demo emails (real mo
 python -m app.eval --model qwen3:8b    # compare; only switch if 4B fails the test set
 python -m app.eval --set holdout       # 7 held-out emails not used for prompt tuning
 python -m app.eval --task extract --set all -v   # extraction field checks
+python -m app.eval --task draft --set all -v     # full pipeline, prints every draft
 ```
 
 Measured results and the reasoning for the default model are in `docs/MODEL_CHOICE.md`.
@@ -180,3 +188,43 @@ After the LLM answers, `grounding.py` checks every value against the sender's te
 `missing_information` is worked out **in code** from the empty required fields, plus any
 extra notes from the model. An attachment that hasn't been read yet (OCR comes in Phase
 10) is listed as missing, never guessed.
+
+## Drafts
+
+- Every draft has `requires_human_review = true`. The model can't set it to anything else
+  (the output format only accepts `true`), and the database refuses to store `false`.
+- Automatic warnings are shown next to the draft. The draft text is never rewritten
+  because of them. A warning is raised for:
+  - numbers, links or email addresses that aren't in the email;
+  - commitment wording ("has been approved", "payment has been made", …);
+  - placeholders or markup.
+- Automatic formatting only:
+  - the subject is a one-line `Re: ...`;
+  - the configured `REPLY_SIGNATURE` is added if the model left it out.
+- `IRRELEVANT` emails get **no draft** and go to review with "No reply recommended". An
+  admin can still ask for a draft (regenerate with `force`).
+- Regenerating creates a new version. The previous one is kept for the audit trail, and
+  admin instructions can steer the new draft.
+
+## Approval and sending
+
+`app/workflow/actions.py:send_email` is the **only** code that can deliver a reply. It
+refuses unless **every** check passes:
+
+1. `SEND_MODE` allows sending: `simulated` writes `.eml` files to `data/outbox/`;
+   `gmail` comes in Phase 11; `disabled` refuses everything.
+2. The email is `APPROVED`, or `FAILED` after a *confirmed* rejection by the provider.
+3. No earlier send attempt has an unknown outcome.
+4. The latest approval is for the **current draft**, and the SHA-256 of that draft's
+   subject and body matches the hash stored at approval time.
+5. The reply address is a valid email address.
+
+Other rules:
+- **Editing an approved draft** withdraws the approval (`APPROVED -> UNDER_REVIEW`).
+- **Approving needs the draft id the admin actually saw.** A stale version is refused.
+  Drafts with warnings need `acknowledge_warnings`.
+- **A "send started" marker is saved before the sender is called.** It is cleared only on
+  success or a confirmed rejection. After a timeout or crash, a second send (or edit) is
+  blocked until a person checks the Sent folder, which prevents duplicate replies.
+- **Every action needs a named admin** (not "system"). Admin edits store a unified diff
+  in the audit row; the diff is never logged.

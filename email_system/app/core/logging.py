@@ -52,16 +52,27 @@ class EventType(StrEnum):
     EXTRACTED = "EXTRACTED"
     DRAFT_GENERATED = "DRAFT_GENERATED"
     MOVED_TO_REVIEW = "MOVED_TO_REVIEW"
+    NO_DRAFT_NEEDED = "NO_DRAFT_NEEDED"
+    DRAFT_EDITED = "DRAFT_EDITED"
+    EDIT_REQUESTED = "EDIT_REQUESTED"
     ADMIN_APPROVED = "ADMIN_APPROVED"
     ADMIN_REJECTED = "ADMIN_REJECTED"
+    REOPENED = "REOPENED"
+    RETRY_REQUESTED = "RETRY_REQUESTED"
+    SEND_STARTED = "SEND_STARTED"
     EMAIL_SENT = "EMAIL_SENT"
     STATE_CHANGED = "STATE_CHANGED"
     ERROR = "ERROR"
 
 
-def scrub_text(value: str) -> str:
+def scrub_secrets(value: str) -> str:
     for pat in _SECRET_PATTERNS:
         value = pat.sub(REDACTED, value)
+    return value
+
+
+def scrub_text(value: str) -> str:
+    value = scrub_secrets(value)
     if len(value) > _MAX_VALUE_LEN:
         value = value[:_MAX_VALUE_LEN] + "...[truncated]"
     return value

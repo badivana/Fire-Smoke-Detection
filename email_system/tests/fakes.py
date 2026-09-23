@@ -9,6 +9,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.db.base import EmailStatus
 from app.db.models import AuditLog, Email
 from app.llm.base import LLMProvider, LLMResponse
@@ -69,3 +70,21 @@ def assert_nothing_sent(db: Session) -> None:
         db.scalars(select(Email).where(Email.sent_provider_message_id.is_not(None))).first() is None
     )
     assert db.scalars(select(AuditLog).where(AuditLog.event_type == "EMAIL_SENT")).first() is None
+    outbox = get_settings().outbox_dir
+    assert not (outbox.exists() and any(outbox.iterdir())), "simulated outbox is not empty"
+
+
+class RecordingSender:
+    """Sender double: records messages, or raises a scripted exception."""
+
+    name = "recording"
+
+    def __init__(self, error: Exception | None = None) -> None:
+        self.error = error
+        self.sent: list = []
+
+    def send(self, message) -> str:
+        if self.error is not None:
+            raise self.error
+        self.sent.append(message)
+        return f"rec-{len(self.sent)}"

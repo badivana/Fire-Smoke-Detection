@@ -7,6 +7,10 @@ from app.core.config import Settings, get_settings
 from app.db.session import get_engine, get_sessionmaker
 
 _APP_ENV_PREFIXES = (
+    "OUTBOX_",
+    "INSTITUTION_",
+    "REPLY_",
+    "ATTACHMENTS_",
     "APP_",
     "DEMO_",
     "LOG_",
@@ -34,6 +38,7 @@ def isolated_env(monkeypatch, tmp_path):
     monkeypatch.setitem(Settings.model_config, "env_file", None)
     monkeypatch.setenv("DATABASE_URL", "sqlite:///:memory:")  # never touch data/app.db
     monkeypatch.setenv("ATTACHMENTS_DIR", str(tmp_path / "attachments"))
+    monkeypatch.setenv("OUTBOX_DIR", str(tmp_path / "outbox"))
     caches = (get_settings, get_categories, get_engine, get_sessionmaker)
     for c in caches:
         c.cache_clear()
