@@ -76,8 +76,8 @@ class Sample(BaseModel):
 
 
 @lru_cache
-def load_samples() -> dict[str, Sample]:
-    raw = yaml.safe_load((DEMO_DIR / "samples.yaml").read_text(encoding="utf-8"))
+def load_samples(path: Path = DEMO_DIR / "samples.yaml") -> dict[str, Sample]:
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     samples = [Sample.model_validate(s) for s in raw["samples"]]
     ids = [s.id for s in samples]
     if len(ids) != len(set(ids)):

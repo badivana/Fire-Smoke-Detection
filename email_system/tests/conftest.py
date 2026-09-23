@@ -43,23 +43,11 @@ def isolated_env(monkeypatch, tmp_path):
 
 
 # ---------------------------------------------------------------- database fixtures
-from pathlib import Path  # noqa: E402
-
 from alembic import command  # noqa: E402
-from alembic.config import Config  # noqa: E402
 from sqlalchemy.orm import Session, sessionmaker  # noqa: E402
 
+from app.db.migrate import alembic_config  # noqa: E402,F401  (re-exported for tests)
 from app.db.session import make_engine  # noqa: E402
-
-EMAIL_SYSTEM_DIR = Path(__file__).resolve().parents[1]
-
-
-def alembic_config(url: str) -> Config:
-    cfg = Config(str(EMAIL_SYSTEM_DIR / "alembic.ini"))
-    cfg.set_main_option("script_location", str(EMAIL_SYSTEM_DIR / "migrations"))
-    cfg.set_main_option("sqlalchemy.url", url)
-    cfg.attributes["configure_logger"] = False
-    return cfg
 
 
 @pytest.fixture

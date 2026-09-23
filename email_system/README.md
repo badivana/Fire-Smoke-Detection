@@ -3,7 +3,7 @@
 This system reads, classifies and extracts details from institutional emails, then drafts replies.
 **It never sends an email without explicit admin approval.**
 
-Status: **Phase 3 of 13 (demo ingestion)**. See `docs/DESIGN_REVIEW.md` for the review of error and spam handling.
+Status: **Phase 4 of 13 (LLM provider + classification)**. See `docs/DESIGN_REVIEW.md` for the review of error and spam handling.
 
 ## Install (clean Mac, Apple Silicon, zsh)
 
@@ -50,6 +50,19 @@ email_system/
 │   │   ├── samples.yaml     10 fictional sample emails + expected results
 │   │   ├── fixtures/        quotation PDF (text layer) + scanned quotation (image only)
 │   │   └── __main__.py      python -m app.demo
+│   ├── eval/__main__.py     python -m app.eval: classification accuracy on a REAL LLM
+│   ├── llm/
+│   │   ├── base.py          LLMProvider interface + HTTP error mapping
+│   │   ├── ollama.py        /api/chat, JSON-schema `format`, think=false
+│   │   ├── openai_compat.py /v1/chat/completions, response_format json_schema (NIM etc.)
+│   │   ├── structured.py    parse + Pydantic-validate, 1 stricter retry, else LLM_SCHEMA_INVALID
+│   │   └── factory.py       build_provider() from settings
+│   ├── pipeline/
+│   │   ├── prompts.py       untrusted-data wrapper (random-nonce delimiters), classify prompt
+│   │   ├── schemas.py       ClassificationOutput + inline JSON schema
+│   │   ├── classify.py      NEW -> CLASSIFIED / ERROR, review flags
+│   │   └── failures.py      ProcessingError row + audit + ERROR state
+│   ├── workflow/states.py   the ONE transition table + transition()
 │   ├── ingestion/
 │   │   ├── models.py        IncomingEmail (demo and Gmail both map to this)
 │   │   ├── normalize.py     HTML->text, hidden-text split, invisible chars, truncation
@@ -122,3 +135,28 @@ Rules enforced by the database itself (not just by the code):
 - The demo endpoints return 404 when `DEMO_MODE=false`. They require `X-Admin-Key` when
   `ADMIN_API_KEY` is set.
 - Each sample has a fixed message id, so posting it again returns `duplicate: true`.
+
+## LLM
+
+```zsh
+ollama pull qwen3:4b
+python -m app.eval -v                  # accuracy on the 10 demo emails (real model)
+python -m app.eval --model qwen3:8b    # compare; only switch if 4B fails the test set
+python -m app.eval --set holdout       # 7 held-out emails not used for prompt tuning
+```
+
+Measured results and the reasoning for the default model are in `docs/MODEL_CHOICE.md`.
+
+- Every email goes to the model **wrapped as untrusted data**, between
+  `<<<EMAIL_<random>>>` markers. The random part is new on each call, so the email can't
+  fake the end marker.
+- Output is constrained by a JSON schema (Ollama `format`), then validated by Pydantic.
+  If validation fails, the call is retried once with a stricter prompt. If it fails again,
+  the email goes to `ERROR`.
+- The LLM's confidence is not trusted on its own. An email is flagged for review when:
+  - confidence is below 0.6;
+  - the model returns an unknown category;
+  - the model reports a red flag (instructions to an AI, credential request, payment
+    change, pressure);
+  - the rule-based spam checks disagree with the model;
+  - the email was truncated.

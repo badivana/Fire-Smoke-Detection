@@ -167,6 +167,9 @@ class Classification(TimestampMixin, Base):
     model_name: Mapped[str] = mapped_column(String(100), nullable=False)
     prompt_version: Mapped[str] = mapped_column(String(32), nullable=False)
     llm_attempts: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    red_flags: Mapped[list[str]] = mapped_column(
+        JSON, default=list, server_default=text("'[]'"), nullable=False
+    )
 
     email: Mapped[Email] = relationship(back_populates="classifications")
 

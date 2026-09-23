@@ -31,6 +31,7 @@ class ErrorCode(StrEnum):
     # Workflow
     INVALID_TRANSITION = "INVALID_TRANSITION"
     DUPLICATE_EMAIL = "DUPLICATE_EMAIL"
+    MAX_ATTEMPTS_EXCEEDED = "MAX_ATTEMPTS_EXCEEDED"
 
 
 class FailureState(StrEnum):
@@ -87,6 +88,9 @@ ERROR_POLICIES: dict[ErrorCode, ErrorPolicy] = {
     ),
     ErrorCode.DUPLICATE_EMAIL: ErrorPolicy(
         FailureState.NONE, False, "Email already ingested (same message_id)."
+    ),
+    ErrorCode.MAX_ATTEMPTS_EXCEEDED: ErrorPolicy(
+        FailureState.NONE, False, "Processing retry limit reached; handle manually."
     ),
 }
 

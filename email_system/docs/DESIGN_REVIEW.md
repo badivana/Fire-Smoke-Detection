@@ -56,3 +56,32 @@ Items marked **[accepted]** changed or added to the spec. The user approved them
 - **Not done (known limitations):**
   - Quoted reply chains (`> ...`, "On ... wrote:") are kept in the body. Phase 4 will decide whether to trim them before prompting.
   - Sample emails with an inline image and no body are not covered.
+
+## F. Phase 4 (LLM + classification) decisions
+
+- **One transition table** (`app/workflow/states.py`) for every status change. Tests check
+  that `APPROVED` can only follow `UNDER_REVIEW`, that `SENT` can only follow
+  `APPROVED`/`FAILED`, and that no path reaches `SENT` without passing `UNDER_REVIEW`.
+- **Prompt-injection defence has four layers:**
+  1. The email is wrapped in markers that contain a random nonce, and any `<<<`/`>>>`
+     inside the email is broken up.
+  2. The system prompt says the email is untrusted data.
+  3. The model reports `red_flags` in a separate field.
+  4. The rule-based signals from ingestion.
+
+  None of these alone was enough on real models (see `MODEL_CHOICE.md`). Together they
+  flagged every suspicious email in the test set. The category the model picks is never a
+  safety control.
+- **Structured output:** the JSON schema is written out inline (no `$ref`) and sent to the
+  model to constrain its output, then validated by Pydantic with `extra="forbid"`. If
+  validation fails, the call is retried once with a stricter prompt that includes the
+  validation error. After that the email goes to `ERROR`. Connection errors and timeouts
+  are not retried with a stricter prompt; the email goes straight to `ERROR` and the admin
+  retries it.
+- **Cap on attempts:** `MAX_PROCESSING_ATTEMPTS` is checked *before* the LLM is called.
+- **Rule-signal details are kept out of the trusted part of the prompt:** only bare codes
+  go there, because the details can include sender-controlled text such as filenames.
+- **No LLM text in logs:** neither the prompt, the reason nor the response is logged. Audit
+  rows store the category, confidence, flags, model and prompt version.
+- **Seen in a real run:** Ollama's model load can be killed when memory runs out. This
+  shows up as `LLM_UNAVAILABLE` → `ERROR`, and the email can be retried.
