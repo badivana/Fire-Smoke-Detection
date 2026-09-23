@@ -21,8 +21,9 @@ H = {"X-Admin-Name": "Demo Admin"}
 def main(base: str) -> int:
     c = httpx.Client(base_url=base, headers=H, timeout=600)
     health = c.get("/health").json()
-    print(f"server: demo={health['demo_mode']} send={health['send_mode']} "
-          f"model={health['llm_model']}")
+    print(
+        f"server: demo={health['demo_mode']} send={health['send_mode']} model={health['llm_model']}"
+    )
     if health["send_mode"] != "simulated":
         print("refusing: this demo only runs with SEND_MODE=simulated")
         return 2
@@ -37,9 +38,11 @@ def main(base: str) -> int:
         r = c.post(f"/emails/{eid}/process")
         d = r.json() if r.status_code == 200 else c.get(f"/emails/{eid}").json()
         err = "" if r.status_code == 200 else f" [HTTP {r.status_code} {r.json().get('error')}]"
-        print(f"   {sid:26} {d['status']:13} {str(d['category']):17} "
-              f"{'v' + str(d['draft']['version']) if d['draft'] else '-':6} "
-              f"{time.monotonic() - t0:5.0f}  {len(d['review_reasons'])}{err}")
+        print(
+            f"   {sid:26} {d['status']:13} {str(d['category']):17} "
+            f"{'v' + str(d['draft']['version']) if d['draft'] else '-':6} "
+            f"{time.monotonic() - t0:5.0f}  {len(d['review_reasons'])}{err}"
+        )
 
     print("\n3) sending WITHOUT approval (must be refused)")
     r = c.post(f"/emails/{ids['quotation_pdf']}/send")
@@ -51,12 +54,16 @@ def main(base: str) -> int:
         if not d["draft"]:
             print(f"   {sid}: no draft ({d['status']}), skipped")
             continue
-        print(f"   --- {sid} draft v{d['draft']['version']} "
-              f"(warnings: {len(d['draft']['warnings'])}) ---")
+        print(
+            f"   --- {sid} draft v{d['draft']['version']} "
+            f"(warnings: {len(d['draft']['warnings'])}) ---"
+        )
         for line in d["draft"]["body"].splitlines():
             print(f"   | {line}")
-        a = c.post(f"/emails/{ids[sid]}/approve",
-                   json={"draft_id": d["draft"]["id"], "acknowledge_warnings": True})
+        a = c.post(
+            f"/emails/{ids[sid]}/approve",
+            json={"draft_id": d["draft"]["id"], "acknowledge_warnings": True},
+        )
         s = c.post(f"/emails/{ids[sid]}/send")
         print(f"   approve -> {a.status_code}, send -> {s.status_code} {s.json()}")
 
@@ -71,8 +78,9 @@ def main(base: str) -> int:
         print(f"   - {reason}")
 
     stats = c.get("/dashboard/stats").json()
-    print(f"\n7) final: { {k: v for k, v in stats['by_status'].items() if v} }  "
-          f"sent={stats['sent']}")
+    print(
+        f"\n7) final: { {k: v for k, v in stats['by_status'].items() if v} }  sent={stats['sent']}"
+    )
     audit = c.get(f"/emails/{ids['invoice_network']}/audit").json()
     print("   invoice audit trail: " + " > ".join(a["event_type"] for a in audit))
     return 0
