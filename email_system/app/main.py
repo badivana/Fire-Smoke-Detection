@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from app.core.categories import get_categories
 from app.core.config import get_settings
 from app.core.logging import get_logger, setup_logging
+from app.db.session import db_ping
 
 
 @asynccontextmanager
@@ -29,6 +30,7 @@ def create_app() -> FastAPI:
         return {
             "status": "ok",
             **get_settings().public_summary(),
+            "database_ok": db_ping(),
             "categories": get_categories().names,
         }
 

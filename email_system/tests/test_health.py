@@ -13,4 +13,5 @@ def test_health_reports_safe_config():
     assert data["send_mode"] == "simulated"
     assert data["llm_model"] == "qwen3:4b"
     assert "IRRELEVANT" in data["categories"]
+    assert data["database_ok"] is True
     assert not any("key" in k.lower() or "secret" in k.lower() for k in data)
