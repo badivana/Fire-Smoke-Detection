@@ -162,3 +162,21 @@ Items marked **[accepted]** changed or added to the spec. The user approved them
 - **Not done yet:** there is no "confirm not delivered" action to clear an unknown send
   outcome, so for now it needs a DB fix. This belongs with Gmail (Phase 11), where the
   Sent folder can be checked automatically.
+
+## J. Phase 8 (API) decisions
+
+- **Two headers:** `X-Admin-Key` answers "may this client use the API?".
+  `X-Admin-Name` answers "which person is acting?" and is written to the audit trail.
+  There are no individual accounts in v1, so the name is self-declared by whoever holds
+  the key. Individual logins are a documented limitation.
+- **The LLM and the sender are injected as dependencies.** The sender is created lazily,
+  only when a send really happens. Found while reviewing my own code: with an eager
+  sender, `POST /retry` on an LLM error failed with 403 whenever `SEND_MODE=disabled`.
+- **`POST /process` only accepts NEW/CLASSIFIED emails.** Anything else is a 409, never a
+  silent no-op.
+- **`allowed_actions`** in the detail response is only a hint for the dashboard. Every
+  action is checked again on the server.
+- **Error bodies** contain the code, a fixed message and a short detail. They never
+  include email text or stack traces (tested).
+- **Processing is synchronous.** On CPU, one email takes 1-2 minutes. A background job
+  queue is left for later; single-admin use is fine for v1.

@@ -6,7 +6,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api import demo
+from app.api import dashboard, demo, emails
+from app.api import errors as api_errors
 from app.core.categories import get_categories
 from app.core.config import get_settings
 from app.core.logging import get_logger, setup_logging
@@ -35,6 +36,9 @@ def create_app() -> FastAPI:
             "categories": get_categories().names,
         }
 
+    api_errors.install(app)
+    app.include_router(emails.router)
+    app.include_router(dashboard.router)
     app.include_router(demo.router)
     return app
 

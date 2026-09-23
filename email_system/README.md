@@ -3,7 +3,7 @@
 This system reads, classifies and extracts details from institutional emails, then drafts replies.
 **It never sends an email without explicit admin approval.**
 
-Status: **Phase 7 of 13 (approval workflow + sending guard)**. See `docs/DESIGN_REVIEW.md` for the review of error and spam handling.
+Status: **Phase 8 of 13 (REST API)**. See `docs/DESIGN_REVIEW.md` for the review of error and spam handling.
 
 ## Install (clean Mac, Apple Silicon, zsh)
 
@@ -44,7 +44,10 @@ email_system/
 │   │   ├── errors.py        ErrorCode -> (ERROR|FAILED|NONE, retryable, message)
 │   │   └── logging.py       Event logging with secret/body redaction
 │   ├── api/
-│   │   ├── deps.py          get_db, X-Admin-Key check, demo-mode guard
+│   │   ├── deps.py          get_db, X-Admin-Key, X-Admin-Name, LLM/sender injection
+│   │   ├── emails.py        /emails queue, detail, process, draft, approve, send, ...
+│   │   ├── dashboard.py     /dashboard/stats
+│   │   ├── errors.py        error code -> HTTP status (409/503/502/...)
 │   │   └── demo.py          GET /demo/samples, POST /demo/emails
 │   ├── demo/
 │   │   ├── samples.yaml     10 fictional sample emails + expected results
@@ -228,3 +231,33 @@ Other rules:
   blocked until a person checks the Sent folder, which prevents duplicate replies.
 - **Every action needs a named admin** (not "system"). Admin edits store a unified diff
   in the audit row; the diff is never logged.
+
+## API
+
+Interactive docs: `http://127.0.0.1:8000/docs`.
+
+- **Headers:**
+  - `X-Admin-Key` is needed on every route when `ADMIN_API_KEY` is set (always in prod).
+  - `X-Admin-Name` is needed on every call that changes something; it is recorded as the
+    actor in the audit trail.
+
+| Method & path | What it does |
+|---|---|
+| `GET /emails?status=&category=&needs_review=&q=&limit=&offset=` | queue |
+| `GET /emails/{id}` | detail: email, attachments, classification, extraction, missing info, current draft + versions, approvals, `allowed_actions`, `ai_banner` |
+| `GET /emails/{id}/audit` | audit trail (includes admin edit diffs) |
+| `POST /emails/{id}/process` | classify → extract → draft → UNDER_REVIEW (synchronous; minutes on CPU) |
+| `POST /emails/{id}/regenerate-draft` `{instructions?}` | new AI draft version (withdraws approval) |
+| `PUT /emails/{id}/draft` `{subject, body, expected_draft_id?}` | save / edit draft (new version) |
+| `POST /emails/{id}/approve` `{draft_id, acknowledge_warnings?, comment?}` | approve that exact draft |
+| `POST /emails/{id}/reject` `{reason?}` · `/request-edit` `{comment}` · `/reopen` | decisions |
+| `POST /emails/{id}/send` | send the approved draft (only path that sends) |
+| `POST /emails/{id}/retry` | ERROR → reprocess; FAILED (confirmed rejection) → resend |
+| `GET /dashboard/stats` | counts |
+| `POST /demo/emails`, `GET /demo/samples` | demo mode only |
+
+- **Error format:** `{"error": CODE, "message", "detail", "retryable"}`.
+  - Workflow conflicts: 409. LLM down: 503. Bad LLM output: 502. Send disabled: 403.
+  - Two admins changing the same email at once: 409 `CONCURRENT_UPDATE`.
+- **Local only without a key:** with no `ADMIN_API_KEY` set, anyone who can reach the port
+  can act. Keep uvicorn on `127.0.0.1` (the default) unless a key is set.
