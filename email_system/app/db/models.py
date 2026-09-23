@@ -49,6 +49,8 @@ class Email(TimestampMixin, Base):
     # Gmail message id (or demo-generated id). Unique => duplicate ingestion is impossible.
     message_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     thread_id: Mapped[str | None] = mapped_column(String(255), index=True)
+    # RFC 5322 Message-ID header (Gmail's own id is `message_id`); used for reply threading.
+    rfc_message_id: Mapped[str | None] = mapped_column(String(998))
     source: Mapped[EmailSource] = mapped_column(str_enum(EmailSource, "email_source"))
     sender: Mapped[str] = mapped_column(String(320), nullable=False)
     sender_name: Mapped[str | None] = mapped_column(String(255))

@@ -9,10 +9,10 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from app.api import dashboard, demo, emails
+from app.api import dashboard, demo, emails, gmail
 from app.api import errors as api_errors
 from app.core.categories import get_categories
-from app.core.config import get_settings
+from app.core.config import AppEnv, get_settings
 from app.core.logging import get_logger, setup_logging
 from app.db.session import db_ping
 
@@ -45,10 +45,21 @@ SECURITY_HEADERS = {
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Institutional Email AI", version="0.1.0", lifespan=lifespan)
+    prod = get_settings().app_env == AppEnv.PROD
+    # In production the interactive API docs are not exposed.
+    app = FastAPI(
+        title="Institutional Email AI",
+        version="0.1.0",
+        lifespan=lifespan,
+        docs_url=None if prod else "/docs",
+        redoc_url=None if prod else "/redoc",
+        openapi_url=None if prod else "/openapi.json",
+    )
 
     @app.get("/health")
     def health() -> dict[str, object]:
+        if get_settings().app_env == AppEnv.PROD:  # unauthenticated: no config details
+            return {"status": "ok", "database_ok": db_ping()}
         return {
             "status": "ok",
             **get_settings().public_summary(),
@@ -75,6 +86,7 @@ def create_app() -> FastAPI:
     api_errors.install(app)
     app.include_router(emails.router)
     app.include_router(dashboard.router)
+    app.include_router(gmail.router)
     app.include_router(demo.router)
     return app
 

@@ -1,9 +1,23 @@
 # Institutional Email AI (human-in-the-loop)
 
+## Documentation
+
+| Document | Contents |
+|---|---|
+| `docs/ARCHITECTURE.md` | architecture diagram, status flow, protection layers, folder structure |
+| `docs/GMAIL_SETUP.md` | Google Cloud + OAuth setup, switching from demo to Gmail |
+| `docs/TEST_RESULTS.md` | what was executed, with results, labelled honestly |
+| `docs/SECURITY_REVIEW.md` | scanners, invariants, manual review, open items |
+| `docs/TROUBLESHOOTING.md` | symptoms → causes → fixes |
+| `docs/MODEL_CHOICE.md` | qwen3:4b vs 8b, measured |
+| `docs/DESIGN_REVIEW.md` | every design decision and bug found, phase by phase |
+| `docs/eval/` | raw logs of the real-model runs |
+
+
 This system reads, classifies and extracts details from institutional emails, then drafts replies.
 **It never sends an email without explicit admin approval.**
 
-Status: **Phase 9 of 13 (dashboard)**. See `docs/DESIGN_REVIEW.md` for the review of error and spam handling.
+Status: **all 13 phases implemented.** See the Documentation list below. Gmail has only been tested against a mocked API. See `docs/DESIGN_REVIEW.md` for the review of error and spam handling.
 
 ## Install (clean Mac, Apple Silicon, zsh)
 
@@ -11,6 +25,7 @@ Status: **Phase 9 of 13 (dashboard)**. See `docs/DESIGN_REVIEW.md` for the revie
 # 1. Tools
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"  # if no Homebrew
 brew install python@3.12 tesseract ollama
+brew services start ollama
 
 # 2. Project
 cd email_system
@@ -19,9 +34,8 @@ source .venv/bin/activate
 pip install -r requirements-dev.txt
 cp .env.example .env
 
-# 3. LLM (needed from Phase 4)
-brew services start ollama
-ollama pull qwen3:4b
+# 3. LLM
+ollama pull qwen3:4b                     # ~2.5 GB download, ~4.3 GB RAM when loaded
 
 # 4. Database (creates data/app.db)
 alembic upgrade head
@@ -74,7 +88,9 @@ email_system/
 │   │   ├── states.py        the ONE transition table + transition()
 │   │   └── actions.py       edit / approve / reject / request edit / regenerate /
 │   │                        reopen / retry / send_email (the only send path)
-│   ├── sending/             EmailSender interface, SimulatedSender (.eml outbox)
+│   ├── sending/             EmailSender interface, SimulatedSender, GmailSender, factory
+│   ├── attachments/         PDF text layer + Tesseract OCR (with limits)
+│   ├── gmail/               OAuth (python -m app.gmail auth), sync (python -m app.gmail sync)
 │   ├── static/              dashboard: index.html, app.js, style.css (no build step)
 │   ├── ingestion/
 │   │   ├── models.py        IncomingEmail (demo and Gmail both map to this)
@@ -288,3 +304,23 @@ Security of the page:
 
 Plain HTML/JS instead of React + Vite: the spec allows it. It means no Node toolchain
 and no build step, and the page is small enough not to need a framework.
+
+## Known limitations (summary; details in docs/SECURITY_REVIEW.md and DESIGN_REVIEW.md)
+
+- **Gmail** has only been tested against a mocked API. Do the first live run with
+  `SEND_MODE=simulated` (see `docs/GMAIL_SETUP.md`).
+- **A plain-text injection can steer the category.** Safety relies on red flags, rule
+  signals, no automatic drafts for flagged emails, and human approval.
+- **Small test set** (17 fictional emails); accuracy numbers are indicative only.
+- **No per-user accounts.** One admin key; admins name themselves (`X-Admin-Name`).
+- **Processing is synchronous:** 1-2 min per email on CPU.
+- **An unknown send outcome** must be cleared by an operator after checking Gmail Sent.
+- **Drafts are conservative and sometimes awkward.** They always need a human read.
+
+## Model choice (short)
+
+`qwen3:4b` is the default. On the test set it matched `qwen3:8b` (15/17 categories,
+42/42 extraction checks for 4B). It is about 2× faster on CPU and needs 4.3 GB instead
+of 6.8 GB of memory, which suits a MacBook Air. The bigger model did not fix the case
+that matters most (injection steering the category), so safety is enforced outside the
+model. Details: `docs/MODEL_CHOICE.md`.

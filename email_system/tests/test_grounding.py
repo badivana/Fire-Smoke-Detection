@@ -163,3 +163,26 @@ def test_ground_restores_reformatted_invoice_date():
     )
     assert g.data["invoice_date"] == "20-09-2026" and g.data["due_date"] == "20-10-2026"
     assert g.ungrounded == []
+
+
+@pytest.mark.parametrize(
+    "text, value, ok, kept",
+    [
+        # currency from the body + figure from the PDF (measured with qwen3:4b)
+        (
+            "Grand total: INR 13,33,400 ... GRAND TOTAL 13,33,400.00",
+            "INR 13,33,400.00",
+            True,
+            "INR 13,33,400.00",
+        ),
+        ("TOTAL 2,88, 156", "2,88, 156", True, "2,88,156"),  # OCR gap removed
+        ("TOTAL 2,88,156", "INR 2,88,156", True, "INR 2,88,156"),
+        ("GST @ 18%: INR 20,520", "GST @ 18%: INR 20,520", True, "GST @ 18%: INR 20,520"),
+        ("TOTAL 2,88,156", "INR 3,88,156", False, None),  # invented figure
+        ("TOTAL 1,33,400.00", "13,33,400.00", False, None),  # not a prefix match
+        ("TOTAL 12,000", "INR 2,000", False, None),  # tail of a larger number
+        ("TOTAL 2,88,156", "two lakh", False, None),  # no number at all
+    ],
+)
+def test_amounts(text, value, ok, kept):
+    assert Source(text=text).resolve("amount", value) == (ok, kept)

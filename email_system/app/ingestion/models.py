@@ -20,6 +20,7 @@ class IncomingEmail(BaseModel):
 
     message_id: str = Field(min_length=1, max_length=255)
     thread_id: str | None = Field(default=None, max_length=255)
+    rfc_message_id: str | None = Field(default=None, max_length=998)
     source: EmailSource
     sender: str = Field(max_length=1024)  # raw "Name <addr>" as received
     to: list[str] = Field(default_factory=list)

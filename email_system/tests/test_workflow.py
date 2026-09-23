@@ -143,13 +143,14 @@ def test_send_disabled_mode_refuses(db, monkeypatch):
     assert_nothing_sent(db)
 
 
-def test_gmail_sender_not_available_yet(monkeypatch):
+def test_gmail_sender_requires_valid_token(monkeypatch, tmp_path):
     monkeypatch.setenv("DEMO_MODE", "false")
     monkeypatch.setenv("SEND_MODE", "gmail")
+    monkeypatch.setenv("GMAIL_TOKEN_FILE", str(tmp_path / "missing-token.json"))
     get_settings.cache_clear()
     with pytest.raises(PipelineError) as ei:
         build_sender()
-    assert ei.value.code == ErrorCode.SEND_DISABLED
+    assert ei.value.code == ErrorCode.GMAIL_AUTH_FAILED
 
 
 def test_system_actor_cannot_approve_or_send(db):

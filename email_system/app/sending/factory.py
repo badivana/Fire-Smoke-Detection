@@ -13,6 +13,9 @@ def build_sender(settings: Settings | None = None) -> EmailSender:
     if s.send_mode == SendMode.SIMULATED:
         return SimulatedSender(s.outbox_dir)
     if s.send_mode == SendMode.GMAIL:
-        # Implemented in Phase 11. Until then real sending is impossible.
-        raise PipelineError(ErrorCode.SEND_DISABLED, "Gmail sending is not implemented yet")
+        from app.gmail.auth import build_service, load_credentials
+        from app.sending.gmail import GmailSender
+
+        # Raises GMAIL_AUTH_FAILED (nothing sent) if the token is missing/invalid.
+        return GmailSender(build_service(load_credentials(s)))
     raise PipelineError(ErrorCode.SEND_DISABLED, "SEND_MODE=disabled")

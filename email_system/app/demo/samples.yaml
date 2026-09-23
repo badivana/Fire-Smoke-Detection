@@ -81,6 +81,8 @@ samples:
         quotation_no: QTN-2026-0412
         total: "13,33,400"
         validity: 30 days
+        delivery_terms: [3 weeks]
+        items_count: 2
     email:
       sender: "Acme Computers Sales <sales@acme-computers.example>"
       to: [purchase@greenfield-institute.example]
@@ -110,13 +112,13 @@ samples:
       vendor: Brightline Projectors
       quotation_no: BL/Q/2291
       total: "2,88,156"
-      # Until OCR exists (Phase 10) the scan is unreadable, so these MUST be null:
-      # anything else would be invented. Phase 10 updates this expectation.
+      # Read with OCR (Phase 10). If Tesseract is missing these must be null instead
+      # (nothing may be invented); the eval then reports them as failed checks.
       extract:
         vendor: [Brightline]
-        quotation_no: null
-        total: null
-        missing_includes: [quotation_no, total]
+        quotation_no: BL/Q/2291
+        total: "2,88,156"
+        validity: [15 days]
     email:
       sender: "Brightline Projectors <quotes@brightline-av.example>"
       to: [purchase@greenfield-institute.example]

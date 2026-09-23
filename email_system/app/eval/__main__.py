@@ -32,6 +32,7 @@ from app.demo.samples import Sample, load_samples
 from app.eval.scoring import score_extraction
 from app.ingestion.service import ingest_email
 from app.llm.factory import build_provider
+from app.pipeline.attachments import prepare_attachments
 from app.pipeline.classify import classify_email
 from app.pipeline.extract import extract_email
 from app.pipeline.process import process_email
@@ -107,6 +108,7 @@ def run_extract_once(model: str | None, samples: dict[str, Sample], ids: list[st
                 if "extract" not in s.expected:
                     continue
                 email = db.get(Email, ingest_email(db, s.to_incoming()).email_id)
+                prepare_attachments(db, email)  # PDF text layer / OCR, as in the pipeline
                 email.category = s.expected["category"]
                 transition(db, email, EmailStatus.CLASSIFIED)
                 db.commit()

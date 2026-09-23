@@ -351,7 +351,8 @@ def send_email(db: Session, email: Email, admin: str, sender: EmailSender) -> st
         to=to,
         subject=draft.subject,
         body=draft.body,
-        in_reply_to=email.message_id,
+        # Thread by the original RFC Message-ID; demo emails only have their own id.
+        in_reply_to=email.rfc_message_id or email.message_id,
         thread_id=email.thread_id,
     )
     try:

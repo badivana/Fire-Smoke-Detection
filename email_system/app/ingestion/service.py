@@ -86,6 +86,7 @@ def ingest_email(db: Session, incoming: IncomingEmail) -> IngestResult:
     email = Email(
         message_id=incoming.message_id,
         thread_id=incoming.thread_id,
+        rfc_message_id=incoming.rfc_message_id,
         source=incoming.source,
         sender=sender.address[:320],
         sender_name=clean_line(sender.name, 255) if sender.name else None,

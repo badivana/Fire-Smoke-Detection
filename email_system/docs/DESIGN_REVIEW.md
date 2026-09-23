@@ -199,3 +199,48 @@ Items marked **[accepted]** changed or added to the spec. The user approved them
 - **Browser tests need a matching Chromium.** Playwright downloads its own browser; if
   that isn't possible, set `CHROMIUM_EXECUTABLE`. Without a browser the tests are
   skipped, not faked.
+
+## L. Phase 10 (attachments / OCR) decisions
+
+- **Order:** PyMuPDF text layer first. Tesseract runs only for pages with fewer than 25
+  characters of text, and for images.
+- **File type decided by content** (magic bytes), never by the sender's filename or MIME
+  type.
+- **Limits:**
+  - 20 pages;
+  - render cap of 40 MP per page;
+  - 60 s OCR timeout;
+  - encrypted PDFs are not opened;
+  - text truncated to `MAX_ATTACHMENT_CHARS`.
+- **Unreadable attachments never fail the email.** The reason is stored on the
+  attachment, the email is flagged, and extraction lists the attachment as missing
+  information.
+- **Attachment text is untrusted:** it is scanned for injection phrases (signals are
+  tagged `...:in_attachment:...`) and only placed inside the untrusted block.
+- **Seen in the real run:**
+  1. The model combined "INR" from the body with "13,33,400.00" from the PDF. The literal
+     check removed that correct total.
+  2. OCR produced `2,88, 156`.
+
+  Fix: an `amount` check. Every number in the value must appear in the source. Only the
+  space right after a thousands comma is closed; other spaces still separate table
+  cells. A first attempt that removed all spaces merged `20   52,000.00` into one number
+  and was caught by the end-to-end tests. Result: 42/42 extraction checks with
+  attachments.
+
+## M. Phase 11 (Gmail) decisions
+
+- **Scopes:** `gmail.readonly` + `gmail.send`. The token is refused if its recorded
+  scopes are missing or broader.
+  - **Found by the tests:** `creds.scopes` echoes the requested scopes when they are
+    passed to the constructor, so the check now reads the token file itself.
+- **Parsing:** `format=raw` with Python's email parser, then the same `ingest_email` as
+  demo mail. Dedupe on the Gmail message id. The RFC `Message-ID` is stored for
+  threading (`emails.rfc_message_id`).
+- **Send error mapping:**
+  - 400/401/403/404/429 and token-refresh failure → `SendRejected` (not delivered,
+    retry allowed);
+  - timeouts, connection errors, 5xx → `SendOutcomeUnknown` (blocked).
+  - `num_retries=0`, so the Google client never resends on its own.
+- **Not tested against a real Gmail account.** All Gmail behaviour is tested with a
+  mocked service. See `GMAIL_SETUP.md` for the first live run.
