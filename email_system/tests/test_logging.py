@@ -43,3 +43,24 @@ def test_log_event_output_is_redacted_json(capsys):
     assert "SECRET BODY" not in line
     assert data["model"] == "qwen3:4b"
     logging.getLogger("email_ai").handlers.clear()
+
+
+def test_metadata_about_content_is_not_over_redacted():
+    out = redact(
+        {
+            "prompt_version": "classify-v3",
+            "raw_category": "INVOICE",
+            "subject_chars": 42,
+            "message_chars": 300,
+            "body_text": "secret words",
+            "raw_html": "<p>x</p>",
+            "prompt": "full prompt",
+            "diff": "- a\n+ b",
+            "user_api_key": "k",
+            "refresh_token_id": "t",
+        }
+    )
+    assert out["prompt_version"] == "classify-v3" and out["raw_category"] == "INVOICE"
+    assert out["subject_chars"] == 42
+    for k in ("body_text", "raw_html", "prompt", "diff", "user_api_key", "refresh_token_id"):
+        assert out[k] == REDACTED, k

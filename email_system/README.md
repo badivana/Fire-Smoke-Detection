@@ -3,7 +3,7 @@
 This system reads, classifies and extracts details from institutional emails, then drafts replies.
 **It never sends an email without explicit admin approval.**
 
-Status: **Phase 8 of 13 (REST API)**. See `docs/DESIGN_REVIEW.md` for the review of error and spam handling.
+Status: **Phase 9 of 13 (dashboard)**. See `docs/DESIGN_REVIEW.md` for the review of error and spam handling.
 
 ## Install (clean Mac, Apple Silicon, zsh)
 
@@ -29,7 +29,7 @@ alembic upgrade head
 # 5. Run
 pytest
 python -m app.demo                # load the 10 demo emails (safe to re-run: duplicates are ignored)
-uvicorn app.main:app --reload     # then open http://127.0.0.1:8000/docs
+uvicorn app.main:app --reload     # dashboard: http://127.0.0.1:8000/   API docs: /docs
 ```
 
 ## Layout
@@ -75,6 +75,7 @@ email_system/
 │   │   └── actions.py       edit / approve / reject / request edit / regenerate /
 │   │                        reopen / retry / send_email (the only send path)
 │   ├── sending/             EmailSender interface, SimulatedSender (.eml outbox)
+│   ├── static/              dashboard: index.html, app.js, style.css (no build step)
 │   ├── ingestion/
 │   │   ├── models.py        IncomingEmail (demo and Gmail both map to this)
 │   │   ├── normalize.py     HTML->text, hidden-text split, invisible chars, truncation
@@ -261,3 +262,29 @@ Interactive docs: `http://127.0.0.1:8000/docs`.
   - Two admins changing the same email at once: 409 `CONCURRENT_UPDATE`.
 - **Local only without a key:** with no `ADMIN_API_KEY` set, anyone who can reach the port
   can act. Keep uvicorn on `127.0.0.1` (the default) unless a key is set.
+
+## Dashboard
+
+Open `http://127.0.0.1:8000/`, enter your name (and the admin key if one is set), then
+click **Load demo emails**.
+
+- **Queue:** Sender | Subject | Category | Priority | Status | Date | Action, with filters
+  for status, category and flag, a search box, and counts at the top.
+- **Detail**, in this order: Original email → Attachments → Classification → Extracted
+  data → Missing information → Draft (editable, with the **AI GENERATED — HUMAN REVIEW
+  REQUIRED** banner and automatic warnings) → Save / Approve / Send / Regenerate /
+  Request edit / Reject / Reopen / Retry → Audit trail.
+- **Buttons shown** follow the API's `allowed_actions`; the server checks everything again.
+- **Approve is blocked while there are unsaved edits.** Send asks for confirmation.
+
+Screenshots from the browser tests: `docs/screenshots/`.
+
+Security of the page:
+- Every email/AI value is inserted with `textContent` (never `innerHTML`).
+- A strict CSP allows no inline script or style and no third-party origins.
+- `X-Frame-Options: DENY`, `nosniff`, `no-referrer`.
+- The admin key is kept in `sessionStorage` only.
+- An XSS browser test (a `<script>`/`onerror` payload in an email) confirms nothing runs.
+
+Plain HTML/JS instead of React + Vite: the spec allows it. It means no Node toolchain
+and no build step, and the page is small enough not to need a framework.

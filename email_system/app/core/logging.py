@@ -16,8 +16,8 @@ from typing import Any
 LOGGER_NAME = "email_ai"
 REDACTED = "[REDACTED]"
 
-# Field names whose values must never be logged (substring match, case-insensitive).
-_SENSITIVE_KEYS = (
+# Secret-like field names: redacted if the name CONTAINS any of these.
+_SECRET_KEYS = (
     "password",
     "secret",
     "token",
@@ -26,14 +26,12 @@ _SENSITIVE_KEYS = (
     "authorization",
     "cookie",
     "credential",
-    "body",
-    "content",
-    "text",
-    "html",
-    "raw",
-    "attachment_data",
-    "prompt",
 )
+# Content field names: redacted if any word of the name is one of these ("body",
+# "body_text", "raw_html"...), except metadata about content ("prompt_version",
+# "subject_chars", "body_length", "raw_category" are safe and useful in logs).
+_CONTENT_WORDS = frozenset({"body", "content", "text", "html", "prompt", "diff", "attachment_data"})
+_METADATA_SUFFIXES = ("version", "chars", "count", "length", "len", "given", "id", "category")
 _SECRET_PATTERNS = (
     re.compile(r"(?i)bearer\s+[a-z0-9._\-]+"),
     re.compile(r"\bsk-[A-Za-z0-9_\-]{10,}"),
@@ -80,7 +78,12 @@ def scrub_text(value: str) -> str:
 
 def _is_sensitive(key: str) -> bool:
     k = key.lower()
-    return any(s in k for s in _SENSITIVE_KEYS)
+    if any(s in k for s in _SECRET_KEYS):
+        return True
+    words = k.replace("-", "_").split("_")
+    if words[-1] in _METADATA_SUFFIXES:
+        return False
+    return k in _CONTENT_WORDS or any(w in _CONTENT_WORDS for w in words)
 
 
 def redact(obj: Any, _key: str = "") -> Any:

@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse, Response
+from fastapi.staticfiles import StaticFiles
 
 from app.api import dashboard, demo, emails
 from app.api import errors as api_errors
@@ -24,6 +27,23 @@ async def lifespan(_: FastAPI):
     yield
 
 
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+
+# Strict policy: no inline scripts/styles, no third-party origins, no framing. Email
+# content is rendered with textContent; this is the second line of defence.
+SECURITY_HEADERS = {
+    "Content-Security-Policy": (
+        "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; "
+        "connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; "
+        "frame-ancestors 'none'"
+    ),
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Cache-Control": "no-store",
+}
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="Institutional Email AI", version="0.1.0", lifespan=lifespan)
 
@@ -36,6 +56,22 @@ def create_app() -> FastAPI:
             "categories": get_categories().names,
         }
 
+    @app.middleware("http")
+    async def security_headers(request: Request, call_next):
+        response = await call_next(request)
+        for k, v in SECURITY_HEADERS.items():
+            response.headers.setdefault(k, v)
+        return response
+
+    @app.get("/", include_in_schema=False)
+    def dashboard_page() -> FileResponse:
+        return FileResponse(STATIC_DIR / "index.html", media_type="text/html; charset=utf-8")
+
+    @app.get("/favicon.ico", include_in_schema=False)
+    def favicon() -> Response:
+        return Response(status_code=204)
+
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     api_errors.install(app)
     app.include_router(emails.router)
     app.include_router(dashboard.router)

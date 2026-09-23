@@ -180,3 +180,22 @@ Items marked **[accepted]** changed or added to the spec. The user approved them
   include email text or stack traces (tested).
 - **Processing is synchronous.** On CPU, one email takes 1-2 minutes. A background job
   queue is left for later; single-admin use is fine for v1.
+
+## K. Phase 9 (dashboard) decisions
+
+- **Plain HTML/JS served by FastAPI** (same origin, no CORS, no Node/npm on the Mac).
+- **XSS defence in depth:**
+  1. a single DOM helper that only uses `textContent`;
+  2. a strict CSP with no `unsafe-inline` or `unsafe-eval`, so even Playwright's
+     string-eval waits were blocked in the tests;
+  3. a browser test injecting `<script>`, `<img onerror>` and `onmouseover` through a
+     real email.
+- **Approval covers the saved text only.** The UI refuses to approve while the textarea
+  differs from the saved draft, and the server compares hashes at send time anyway.
+- **Logging fix found while reading test output:** the redaction hid `prompt_version`
+  and `raw_category` (the key names contain "prompt"/"raw"). Secret-like names are still
+  matched by substring. Content names are now matched by whole word, with an exemption
+  for metadata suffixes (`_version`, `_chars`, ...). Covered by a test.
+- **Browser tests need a matching Chromium.** Playwright downloads its own browser; if
+  that isn't possible, set `CHROMIUM_EXECUTABLE`. Without a browser the tests are
+  skipped, not faked.
