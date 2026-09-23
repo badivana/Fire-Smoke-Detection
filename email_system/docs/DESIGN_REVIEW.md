@@ -42,3 +42,17 @@ Items marked **[accepted]** changed or added to the spec. The user approved them
 - **"Human review required" is a DB rule.** A draft row with `requires_human_review=false` cannot be stored.
 - **What was approved.** An `APPROVED` decision must reference the exact `draft_id`, so the audit trail shows the exact text that was approved. Admin edits create a new draft version with a parent link, and the diff is computed in Phase 7.
 - **Portability.** Enums are stored as VARCHAR + CHECK. The partial index has an explicit filter for each dialect. The same migration was run on SQLite **and a real PostgreSQL 16**.
+
+## E. Phase 3 (ingestion) decisions
+
+- **Hidden HTML text is kept out of the body, and flagged.** Text hidden with `display:none`, `visibility:hidden`, `font-size:0`, `opacity:0` or the `hidden` attribute is a common way to smuggle instructions to an AI. The admin can't see it, so the LLM doesn't get it either. It still counts as a review reason, and phrase checks scan it.
+- **Invisible / bidi characters** (zero-width, soft hyphen, RTL override, BOM) are removed and counted before phrase checks, so `Ig<ZWSP>nore previous instructions` is still caught. NFKC folds full-width look-alike letters.
+- **Phrase lists are a weak signal.** A reworded injection gets past them. The real defences come later: every email goes into the prompt wrapped as delimited untrusted data (Phase 4), LLM outputs are validated against strict schemas, and nothing is sent without human approval. Signals only add review flags.
+- **Which signals force review:** Gmail SPAM label, suspicious phrase, hidden HTML text, dangerous attachment extension, attachment content that doesn't match its type, oversized attachment, unparseable sender. Bulk headers, `external_sender` and `reply_to_mismatch` are shown as hints only, because legitimate mailing systems trigger them too.
+- **Attachments** are stored under their SHA-256 hash (`data/attachments/ab/<sha>.bin`). The sender-controlled filename is only a display label, so path traversal isn't possible. Writes are atomic. Files over `MAX_ATTACHMENT_BYTES` are recorded (name, size, hash) but not stored.
+- **Duplicates:** checked by `message_id` before insert. The DB unique constraint catches concurrent inserts. Each duplicate adds a `DUPLICATE_IGNORED` audit row to the original email. Nothing else changes.
+- **Ingestion never changes state beyond `NEW`**, so it can't approve or send anything.
+- **Source hygiene:** a test fails if any `.py` file contains non-ASCII characters. This came up in this phase: the editor turned `\u200b` escapes into literal invisible characters, and the test stops that happening again.
+- **Not done (known limitations):**
+  - Quoted reply chains (`> ...`, "On ... wrote:") are kept in the body. Phase 4 will decide whether to trim them before prompting.
+  - Sample emails with an inline image and no body are not covered.

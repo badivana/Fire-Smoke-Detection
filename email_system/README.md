@@ -3,7 +3,7 @@
 This system reads, classifies and extracts details from institutional emails, then drafts replies.
 **It never sends an email without explicit admin approval.**
 
-Status: **Phase 2 of 13 (database + migrations)**. See `docs/DESIGN_REVIEW.md` for the review of error and spam handling.
+Status: **Phase 3 of 13 (demo ingestion)**. See `docs/DESIGN_REVIEW.md` for the review of error and spam handling.
 
 ## Install (clean Mac, Apple Silicon, zsh)
 
@@ -28,7 +28,8 @@ alembic upgrade head
 
 # 5. Run
 pytest
-uvicorn app.main:app --reload     # then open http://127.0.0.1:8000/health
+python -m app.demo                # load the 10 demo emails (safe to re-run: duplicates are ignored)
+uvicorn app.main:app --reload     # then open http://127.0.0.1:8000/docs
 ```
 
 ## Layout
@@ -42,12 +43,27 @@ email_system/
 │   │   ├── categories.py    Loads/validates config/categories.yaml
 │   │   ├── errors.py        ErrorCode -> (ERROR|FAILED|NONE, retryable, message)
 │   │   └── logging.py       Event logging with secret/body redaction
+│   ├── api/
+│   │   ├── deps.py          get_db, X-Admin-Key check, demo-mode guard
+│   │   └── demo.py          GET /demo/samples, POST /demo/emails
+│   ├── demo/
+│   │   ├── samples.yaml     10 fictional sample emails + expected results
+│   │   ├── fixtures/        quotation PDF (text layer) + scanned quotation (image only)
+│   │   └── __main__.py      python -m app.demo
+│   ├── ingestion/
+│   │   ├── models.py        IncomingEmail (demo and Gmail both map to this)
+│   │   ├── normalize.py     HTML->text, hidden-text split, invisible chars, truncation
+│   │   ├── spam_signals.py  rule-based spam/phishing/injection hints
+│   │   ├── storage.py       content-addressed attachment files, filename sanitising
+│   │   └── service.py       ingest_email(): dedupe -> clean -> signals -> store -> audit
+│   ├── services/audit.py    audit row + redacted log line per event
 │   └── db/
 │       ├── base.py          Base, UTC datetime type, status enums
 │       ├── models.py        8 tables: emails, attachments, classifications, extractions,
 │       │                    drafts, approvals, audit_logs, processing_errors
 │       └── session.py       Engine (SQLite FK pragma on), sessions, db_ping
 ├── migrations/              Alembic (alembic.ini at project root)
+├── scripts/make_demo_fixtures.py
 ├── config/categories.yaml   Categories + spam signals (add categories here, no code)
 ├── docs/DESIGN_REVIEW.md
 ├── tests/
@@ -83,3 +99,26 @@ Rules enforced by the database itself (not just by the code):
 | Audit logs, approvals and errors can't be deleted with their email | `FOREIGN KEY ... ON DELETE RESTRICT` |
 | Two admins acting at once can't overwrite each other | optimistic lock (`emails.version`) |
 | All timestamps are UTC | `UTCDateTime` type (rejects naive datetimes) |
+
+## Demo data
+
+`app/demo/samples.yaml` has 10 fictional emails:
+
+| id | expected category | what it tests |
+|---|---|---|
+| requirement_lab_pcs | REQUIREMENT | complete request (qty, specs, budget, deadline) |
+| requirement_missing_specs | REQUIREMENT | missing quantity/specs/budget/deadline |
+| quotation_pdf | VENDOR_QUOTATION | PDF with a text layer |
+| quotation_scanned | VENDOR_QUOTATION | scanned PDF, no text layer (OCR in Phase 10) |
+| invoice_network | INVOICE | invoice details in the body |
+| technical_query_wifi | TECHNICAL_QUERY | HTML-only email |
+| general_meeting | GENERAL | meeting request |
+| spam_newsletter | IRRELEVANT | bulk-mail headers |
+| phishing_password | IRRELEVANT | credential phishing, look-alike domain, Reply-To mismatch |
+| prompt_injection_vendor | IRRELEVANT | hidden-HTML injection + zero-width-char obfuscation |
+
+- API: `GET /demo/samples`, `POST /demo/emails` (body `{}` = all samples,
+  `{"sample_ids": [...]}`, or `{"custom": {"sender", "subject", "body"}}`).
+- The demo endpoints return 404 when `DEMO_MODE=false`. They require `X-Admin-Key` when
+  `ADMIN_API_KEY` is set.
+- Each sample has a fixed message id, so posting it again returns `duplicate: true`.

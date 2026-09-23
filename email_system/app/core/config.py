@@ -82,6 +82,7 @@ class Settings(BaseSettings):
     max_attachment_bytes: int = Field(default=15 * 1024 * 1024, ge=1024)
 
     # --- Attachments / OCR ---
+    attachments_dir: Path = BASE_DIR / "data" / "attachments"
     ocr_enabled: bool = True
     tesseract_cmd: str | None = None
 

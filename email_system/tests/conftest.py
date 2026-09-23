@@ -26,13 +26,14 @@ _APP_ENV_PREFIXES = (
 
 
 @pytest.fixture(autouse=True)
-def isolated_env(monkeypatch):
+def isolated_env(monkeypatch, tmp_path):
     """Tests never read the developer's real .env or inherited app env vars."""
     for key in list(os.environ):
         if key.upper().startswith(_APP_ENV_PREFIXES):
             monkeypatch.delenv(key, raising=False)
     monkeypatch.setitem(Settings.model_config, "env_file", None)
     monkeypatch.setenv("DATABASE_URL", "sqlite:///:memory:")  # never touch data/app.db
+    monkeypatch.setenv("ATTACHMENTS_DIR", str(tmp_path / "attachments"))
     caches = (get_settings, get_categories, get_engine, get_sessionmaker)
     for c in caches:
         c.cache_clear()
@@ -84,3 +85,22 @@ def session_factory(engine):
 def db(session_factory) -> Session:
     with session_factory() as s:
         yield s
+
+
+@pytest.fixture
+def client(session_factory):
+    """API client bound to the migrated test database."""
+    from fastapi.testclient import TestClient
+
+    from app.api.deps import get_db
+    from app.main import create_app
+
+    app = create_app()
+
+    def _db():
+        with session_factory() as s:
+            yield s
+
+    app.dependency_overrides[get_db] = _db
+    with TestClient(app) as c:
+        yield c

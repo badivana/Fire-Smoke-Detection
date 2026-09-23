@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.api import demo
 from app.core.categories import get_categories
 from app.core.config import get_settings
 from app.core.logging import get_logger, setup_logging
@@ -34,6 +35,7 @@ def create_app() -> FastAPI:
             "categories": get_categories().names,
         }
 
+    app.include_router(demo.router)
     return app
 
 
