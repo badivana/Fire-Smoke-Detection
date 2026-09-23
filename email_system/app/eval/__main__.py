@@ -5,6 +5,7 @@
     python -m app.eval --runs 3             # repeat to check stability
     python -m app.eval --set holdout        # held-out emails (never used for tuning)
     python -m app.eval --set all
+    python -m app.eval --task extract --set all   # extraction quality + invented values
 
 Uses a throw-away SQLite DB in a temp dir; your data/app.db is not touched.
 Nothing is ever sent. Exit code 1 if accuracy < --min-accuracy or a safety check fails.
@@ -22,13 +23,17 @@ from sqlalchemy.orm import sessionmaker
 from app.core.config import get_settings
 from app.core.errors import PipelineError
 from app.core.logging import setup_logging
+from app.db.base import EmailStatus
 from app.db.migrate import upgrade_to_head
 from app.db.models import Email
 from app.db.session import make_engine
 from app.demo.samples import Sample, load_samples
+from app.eval.scoring import score_extraction
 from app.ingestion.service import ingest_email
 from app.llm.factory import build_provider
 from app.pipeline.classify import classify_email
+from app.pipeline.extract import extract_email
+from app.workflow.states import transition
 
 HOLDOUT = Path(__file__).resolve().parent / "holdout.yaml"
 
@@ -84,10 +89,80 @@ def run_once(model: str | None, samples: dict[str, Sample], sample_ids: list[str
     return rows
 
 
+def run_extract_once(model: str | None, samples: dict[str, Sample], ids: list[str]) -> list[dict]:
+    """Extraction only: the email is put in its EXPECTED category, so extraction quality is
+    measured independently of classification mistakes."""
+    provider = build_provider(get_settings(), model=model)
+    rows = []
+    with tempfile.TemporaryDirectory() as tmp:
+        url = f"sqlite:///{Path(tmp) / 'eval.db'}"
+        upgrade_to_head(url)
+        engine = make_engine(url)
+        Session = sessionmaker(bind=engine, expire_on_commit=False)
+        with Session() as db:
+            for sid in ids:
+                s = samples[sid]
+                if "extract" not in s.expected:
+                    continue
+                email = db.get(Email, ingest_email(db, s.to_incoming()).email_id)
+                email.category = s.expected["category"]
+                transition(db, email, EmailStatus.CLASSIFIED)
+                db.commit()
+                t0 = time.monotonic()
+                row = {"id": sid, "secs": 0.0, "error": None, "checks": [], "ungrounded": []}
+                try:
+                    ext = extract_email(db, email, provider)
+                    row["checks"] = score_extraction(
+                        s.expected["extract"], ext.schema_name, ext.data, ext.missing_information
+                    )
+                    row["ungrounded"] = ext.ungrounded_fields
+                    row["missing"] = ext.missing_information
+                    row["data"] = ext.data
+                except PipelineError as e:
+                    row["error"] = e.code.value
+                row["secs"] = time.monotonic() - t0
+                row["sent"] = email.sent_at is not None
+                rows.append(row)
+        engine.dispose()
+    return rows
+
+
+def main_extract(args, samples: dict[str, Sample], ids: list[str], model: str) -> int:
+    all_rows: list[dict] = []
+    for run in range(1, args.runs + 1):
+        rows = run_extract_once(args.model, samples, ids)
+        all_rows += rows
+        print(f"\n=== extraction run {run}/{args.runs}  set={args.set}  model={model} ===")
+        for r in rows:
+            passed = sum(ok for _, ok, _ in r["checks"])
+            status = r["error"] or f"{passed}/{len(r['checks'])} checks"
+            print(
+                f"{r['id']:26} {status:14} removed(invented)={r['ungrounded'] or '-'}"
+                f"  {r['secs']:.1f}s"
+            )
+            for name, ok, got in r["checks"]:
+                if not ok or args.verbose:
+                    print(f"     {'ok ' if ok else 'XX '}{name}: got {got}")
+            if args.verbose and r.get("missing") is not None:
+                print(f"     missing_information: {r['missing']}")
+    checks = [ok for r in all_rows for _, ok, _ in r["checks"]]
+    errors = sum(r["error"] is not None for r in all_rows)
+    removed = sum(len(r["ungrounded"]) for r in all_rows)
+    sent = sum(r["sent"] for r in all_rows)
+    acc = sum(checks) / len(checks) if checks else 0.0
+    print(f"\nfield checks passed: {sum(checks)}/{len(checks)} = {acc:.0%}   errors: {errors}")
+    print(f"values removed as not found in email (model invented/reworded): {removed}")
+    print(f"emails sent: {sent}")
+    failed = acc < args.min_accuracy or errors > 0 or sent > 0
+    print("RESULT:", "FAIL" if failed else "PASS", f"(min {args.min_accuracy:.0%})")
+    return 1 if failed else 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("--model", help="override model name")
     ap.add_argument("--runs", type=int, default=1)
+    ap.add_argument("--task", default="classify", choices=["classify", "extract"])
     ap.add_argument("--set", default="demo", choices=["demo", "holdout", "all"])
     ap.add_argument("--samples", help="comma-separated sample ids (default: whole set)")
     ap.add_argument("--min-accuracy", type=float, default=0.8)
@@ -98,6 +173,8 @@ def main() -> int:
     samples = sample_set(args.set)
     ids = args.samples.split(",") if args.samples else list(samples)
     model = args.model or get_settings().llm_model_name
+    if args.task == "extract":
+        return main_extract(args, samples, ids, model)
     all_rows: list[dict] = []
     for run in range(1, args.runs + 1):
         rows = run_once(args.model, samples, ids)

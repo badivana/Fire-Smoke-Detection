@@ -3,7 +3,7 @@
 This system reads, classifies and extracts details from institutional emails, then drafts replies.
 **It never sends an email without explicit admin approval.**
 
-Status: **Phase 4 of 13 (LLM provider + classification)**. See `docs/DESIGN_REVIEW.md` for the review of error and spam handling.
+Status: **Phase 5 of 13 (extraction)**. See `docs/DESIGN_REVIEW.md` for the review of error and spam handling.
 
 ## Install (clean Mac, Apple Silicon, zsh)
 
@@ -61,6 +61,8 @@ email_system/
 │   │   ├── prompts.py       untrusted-data wrapper (random-nonce delimiters), classify prompt
 │   │   ├── schemas.py       ClassificationOutput + inline JSON schema
 │   │   ├── classify.py      NEW -> CLASSIFIED / ERROR, review flags
+│   │   ├── extract.py       requirement / quotation / invoice extraction
+│   │   ├── grounding.py     removes any extracted value not found in the email
 │   │   └── failures.py      ProcessingError row + audit + ERROR state
 │   ├── workflow/states.py   the ONE transition table + transition()
 │   ├── ingestion/
@@ -143,6 +145,7 @@ ollama pull qwen3:4b
 python -m app.eval -v                  # accuracy on the 10 demo emails (real model)
 python -m app.eval --model qwen3:8b    # compare; only switch if 4B fails the test set
 python -m app.eval --set holdout       # 7 held-out emails not used for prompt tuning
+python -m app.eval --task extract --set all -v   # extraction field checks
 ```
 
 Measured results and the reasoning for the default model are in `docs/MODEL_CHOICE.md`.
@@ -160,3 +163,20 @@ Measured results and the reasoning for the default model are in `docs/MODEL_CHOI
     change, pressure);
   - the rule-based spam checks disagree with the model;
   - the email was truncated.
+
+## Extraction (no invented facts)
+
+Categories with an `extraction_schema` (REQUIREMENT, VENDOR_QUOTATION, INVOICE) get
+structured data. Amounts, IDs and dates are kept **as written** ("INR 12,00,000").
+
+After the LLM answers, `grounding.py` checks every value against the sender's text
+(subject, body, attachment text):
+- A value that isn't there is **removed**, listed in `ungrounded_fields`, and the email is
+  flagged for review.
+- An item whose name isn't in the email is dropped.
+- A date the model reformatted (`2026-09-20`) is kept only if the email contains the same
+  date (`20-09-2026`), and it is stored in the email's spelling.
+
+`missing_information` is worked out **in code** from the empty required fields, plus any
+extra notes from the model. An attachment that hasn't been read yet (OCR comes in Phase
+10) is listed as missing, never guessed.

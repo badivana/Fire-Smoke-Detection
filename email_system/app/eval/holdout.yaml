@@ -18,7 +18,14 @@ samples:
 
   - id: h_requirement_software
     description: Software licence requirement
-    expected: {category: REQUIREMENT, needs_manual_review: false}
+    expected:
+      category: REQUIREMENT
+      needs_manual_review: false
+      extract:
+        department: [EEE, Electrical]
+        budget: "4,50,000"
+        items_count: 1
+        quantities: [50]
     email:
       sender: "EEE Department <hod.eee@greenfield-institute.example>"
       to: [it-admin@greenfield-institute.example]
@@ -33,7 +40,16 @@ samples:
 
   - id: h_vendor_quote_inline
     description: Quotation written in the email body, no attachment
-    expected: {category: VENDOR_QUOTATION, needs_manual_review: false}
+    expected:
+      category: VENDOR_QUOTATION
+      needs_manual_review: false
+      extract:
+        vendor: [PrintPoint]
+        total: null
+        validity: 31 October 2026
+        delivery_terms: [5 working days]
+        items_count: 1
+        missing_includes: [total]
     email:
       sender: "PrintPoint Supplies <sales@printpoint.example>"
       to: [purchase@greenfield-institute.example]
@@ -47,7 +63,14 @@ samples:
 
   - id: h_invoice_reminder
     description: Payment reminder for an overdue invoice
-    expected: {category: INVOICE, needs_manual_review: false}
+    expected:
+      category: INVOICE
+      needs_manual_review: false
+      extract:
+        vendor: [CloudNet]
+        invoice_no: CN-55021
+        total: "84,960"
+        due_date: 31-08-2026
     email:
       sender: "CloudNet Billing <billing@cloudnet-isp.example>"
       to: [accounts@greenfield-institute.example]

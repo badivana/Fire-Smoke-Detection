@@ -85,3 +85,26 @@ Items marked **[accepted]** changed or added to the spec. The user approved them
   rows store the category, confidence, flags, model and prompt version.
 - **Seen in a real run:** Ollama's model load can be killed when memory runs out. This
   shows up as `LLM_UNAVAILABLE` → `ERROR`, and the email can be retried.
+
+## G. Phase 5 (extraction) decisions
+
+- **Rule 2 is enforced in code, not only in the prompt.** The fact-check module
+  (`grounding.py`) removes values that can't be traced to the sender's text. It is
+  deliberately conservative: a correct value the model reworded is dropped and shows up as
+  missing. That is safer than a confident invented value.
+- **Bug found and fixed during development:** the first version checked values against the
+  whole prompt. A quantity of `10` was then "confirmed" by the random delimiter or the
+  timestamp. The check now uses only the sender's text, and the number match ignores
+  digits inside IDs, dates and amounts (`INV-7781`, `20-10-2026`, `12,00,000`).
+- **Seen in a real run:** qwen3:4b changed `20-09-2026` to `2026-09-20` even though the
+  prompt says to copy exactly. For date fields, an ISO date is kept only if the email has
+  the same date in day-first or month-name form, and it is stored in the email's spelling.
+  Month-first numeric dates are never assumed.
+- **Amounts are kept as strings.** The model never does arithmetic, and nothing is summed
+  or converted. Example: the toner quote gives a unit price but no total, so `total`
+  stays null and "total" is listed as missing.
+- **The status stays `CLASSIFIED`.** The spec has no EXTRACTED state; an `EXTRACTED` audit
+  event is written. Categories with `extraction_schema: none` skip the LLM call.
+- **Attachments not read yet** (text layer and OCR come in Phase 10) are marked in the
+  prompt as "content not available", listed in `missing_information`, and flagged for
+  review.

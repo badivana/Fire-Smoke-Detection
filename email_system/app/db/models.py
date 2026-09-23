@@ -188,8 +188,15 @@ class Extraction(TimestampMixin, Base):
     schema_name: Mapped[str] = mapped_column(String(32), nullable=False)
     data: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     missing_information: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    # Values the model produced that could not be found in the email (removed from `data`).
+    ungrounded_fields: Mapped[list[str]] = mapped_column(
+        JSON, default=list, server_default=text("'[]'"), nullable=False
+    )
     model_name: Mapped[str] = mapped_column(String(100), nullable=False)
     prompt_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    llm_attempts: Mapped[int] = mapped_column(
+        Integer, default=1, server_default=text("1"), nullable=False
+    )
 
     email: Mapped[Email] = relationship(back_populates="extractions")
 
