@@ -1,0 +1,11 @@
+-r requirements.txt
+pytest>=8.0
+httpx>=0.27
+ruff>=0.5
+psycopg[binary]>=3.1  # only for the optional PostgreSQL test
+# Demo fixture generation (scripts/make_demo_fixtures.py) and fixture tests
+pymupdf>=1.24
+pillow>=10.1
+# Browser tests of the dashboard (tests/test_dashboard_e2e.py). Then run:
+#   python -m playwright install chromium      (or set CHROMIUM_EXECUTABLE=/path/to/chrome)
+playwright>=1.45

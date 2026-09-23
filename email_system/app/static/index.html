@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Email Review Desk</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a href="#/" class="brand">Email Review Desk</a>
+    <span id="mode" class="pill"></span>
+    <form id="who" class="who" autocomplete="off">
+      <label>Admin name <input id="admin-name" required maxlength="100" placeholder="Your name"></label>
+      <label>Admin key <input id="admin-key" type="password" maxlength="200" placeholder="(if configured)"></label>
+      <button type="submit">Save</button>
+    </form>
+  </header>
+  <div id="toast" role="status" aria-live="polite" hidden></div>
+  <main id="view"></main>
+  <noscript>This dashboard needs JavaScript.</noscript>
+</body>
+</html>

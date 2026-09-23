@@ -1,0 +1,52 @@
+server: demo=True send=simulated model=qwen3:4b
+
+1) loaded 10 demo emails
+
+2) processing each email with the real model
+   sample                     status        category          draft    sec  review reasons
+   requirement_lab_pcs        UNDER_REVIEW  REQUIREMENT       v1        89  0
+   requirement_missing_specs  UNDER_REVIEW  REQUIREMENT       v1        58  0
+   quotation_pdf              UNDER_REVIEW  VENDOR_QUOTATION  v1       105  0
+   quotation_scanned          UNDER_REVIEW  VENDOR_QUOTATION  v1        76  0
+   invoice_network            UNDER_REVIEW  INVOICE           v1        78  0
+   technical_query_wifi       UNDER_REVIEW  TECHNICAL_QUERY   v1        38  0
+   general_meeting            UNDER_REVIEW  GENERAL           v1        37  0
+   spam_newsletter            UNDER_REVIEW  IRRELEVANT        -         16  1
+   phishing_password          UNDER_REVIEW  GENERAL           -         17  4
+   prompt_injection_vendor    UNDER_REVIEW  IRRELEVANT        -         21  4
+
+3) sending WITHOUT approval (must be refused)
+   quotation_pdf -> HTTP 409 SEND_NOT_APPROVED
+
+4) admin approves + sends two replies
+   --- requirement_lab_pcs draft v1 (warnings: 0) ---
+   | Thank you for your request, Dr. Kulkarni.
+   | 
+   | We acknowledge the requirement for 20 Desktop PCs and 20 UPS 1 kVA units as specified in your email. The technical specifications include Intel Core i5 (13th gen) or equivalent, 16 GB RAM, 512 GB NVMe SSD, 23.8" monitor, keyboard and mouse, and Windows 11 Pro. The approved budget is INR 12,00,000 (including GST), with a deadline of 15 October 2026.
+   | 
+   | To proceed, we need the following details:
+   | - Vendor names and contact information
+   | - Quotation prices for each item
+   | - Delivery timelines
+   | 
+   | IT/Admin Office
+   approve -> 200, send -> 200 {'email_id': 1, 'status': 'SENT', 'provider_message_id': 'sim-837388eb65da4cad8f5a9a589c80498d'}
+   --- invoice_network draft v1 (warnings: 0) ---
+   | Thank you for providing the invoice details. We have received invoice INV-7781 for the 24-port managed Gigabit switches (PO GIT/PO/2026/118) with a total of INR 1,34,520 due by 20-10-2026. This invoice will be verified and processed according to our institution's procedure.
+   | 
+   | IT/Admin Office
+   approve -> 200, send -> 200 {'email_id': 5, 'status': 'SENT', 'provider_message_id': 'sim-4b567cf146d0416a8736e1ba4315d3ee'}
+
+5) admin rejects the spam newsletter
+   -> 200 REJECTED
+
+6) injection email: what the admin sees
+   status=UNDER_REVIEW category=IRRELEVANT draft=False
+   - Email contains hidden text (184 chars)
+   - Possible phishing or prompt-injection text detected
+   - LLM reported red flags: credential_request, instructions_to_ai, payment_detail_change, pressure_or_threat
+   - No reply recommended (IRRELEVANT); confirm or reject
+
+7) final: {'UNDER_REVIEW': 7, 'SENT': 2, 'REJECTED': 1}  sent=2
+   invoice audit trail: EMAIL_RECEIVED > CLASSIFIED > STATE_CHANGED > EXTRACTED > DRAFT_GENERATED > STATE_CHANGED > STATE_CHANGED > MOVED_TO_REVIEW > STATE_CHANGED > ADMIN_APPROVED > SEND_STARTED > STATE_CHANGED > EMAIL_SENT
+exit=0

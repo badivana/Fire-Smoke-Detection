@@ -1,0 +1,20 @@
+[project]
+name = "institutional-email-ai"
+version = "0.1.0"
+description = "AI-powered institutional email management & approval system (human-in-the-loop)"
+requires-python = ">=3.11,<3.13"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# Alembic-generated files keep Alembic's template style.
+"migrations/versions/*" = ["UP", "I", "E501"]

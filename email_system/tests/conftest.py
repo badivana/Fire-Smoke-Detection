@@ -1,0 +1,99 @@
+import os
+
+import pytest
+
+from app.core.categories import get_categories
+from app.core.config import Settings, get_settings
+from app.db.session import get_engine, get_sessionmaker
+
+_APP_ENV_PREFIXES = (
+    "OUTBOX_",
+    "INSTITUTION_",
+    "REPLY_",
+    "ATTACHMENTS_",
+    "APP_",
+    "DEMO_",
+    "LOG_",
+    "ADMIN_",
+    "DATABASE_",
+    "LLM_",
+    "OLLAMA_",
+    "OPENAI_COMPAT_",
+    "CLASSIFICATION_",
+    "CATEGORIES_",
+    "MAX_",
+    "OCR_",
+    "TESSERACT_",
+    "SEND_",
+    "GMAIL_",
+)
+
+
+@pytest.fixture(autouse=True)
+def isolated_env(monkeypatch, tmp_path):
+    """Tests never read the developer's real .env or inherited app env vars."""
+    for key in list(os.environ):
+        if key.upper().startswith(_APP_ENV_PREFIXES):
+            monkeypatch.delenv(key, raising=False)
+    monkeypatch.setitem(Settings.model_config, "env_file", None)
+    monkeypatch.setenv("DATABASE_URL", "sqlite:///:memory:")  # never touch data/app.db
+    monkeypatch.setenv("ATTACHMENTS_DIR", str(tmp_path / "attachments"))
+    monkeypatch.setenv("OUTBOX_DIR", str(tmp_path / "outbox"))
+    caches = (get_settings, get_categories, get_engine, get_sessionmaker)
+    for c in caches:
+        c.cache_clear()
+    yield
+    for c in caches:
+        c.cache_clear()
+
+
+# ---------------------------------------------------------------- database fixtures
+from alembic import command  # noqa: E402
+from sqlalchemy.orm import Session, sessionmaker  # noqa: E402
+
+from app.db.migrate import alembic_config  # noqa: E402,F401  (re-exported for tests)
+from app.db.session import make_engine  # noqa: E402
+
+
+@pytest.fixture
+def db_url(tmp_path) -> str:
+    return f"sqlite:///{tmp_path / 'test.db'}"
+
+
+@pytest.fixture
+def engine(db_url):
+    """Schema built by running the real Alembic migrations, not create_all()."""
+    command.upgrade(alembic_config(db_url), "head")
+    eng = make_engine(db_url)
+    yield eng
+    eng.dispose()
+
+
+@pytest.fixture
+def session_factory(engine):
+    return sessionmaker(bind=engine, expire_on_commit=False)
+
+
+@pytest.fixture
+def db(session_factory) -> Session:
+    with session_factory() as s:
+        yield s
+
+
+@pytest.fixture
+def client(session_factory):
+    """API client bound to the migrated test database."""
+    from fastapi.testclient import TestClient
+
+    from app.api.deps import get_db
+    from app.main import create_app
+
+    app = create_app()
+
+    def _db():
+        with session_factory() as s:
+            yield s
+
+    app.dependency_overrides[get_db] = _db
+    with TestClient(app) as c:
+        yield c
